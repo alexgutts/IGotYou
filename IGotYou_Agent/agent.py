@@ -38,15 +38,27 @@ root_agent = Agent(
 )
 
 
+# Create the runner instance for the agent
+# This will be used to execute agent queries
 runner = InMemoryRunner(agent=root_agent)
 
 
 async def main():
+    """
+    Main function to test the agent
+    This function runs a sample query to test the agent functionality
+    """
+    # Test query: Find hidden gems in Bucharest near Palace of Parliament
     response = await runner.run_debug(
-        "Find me a hidden gem in Bucharest near Palace of Parliament"
+        "Find me a hidden gem in Campeche Mexico"
     )
     print(response)
 
+    # Clean up: close the runner when done
     await runner.close()
 
-asyncio.run(main())
+
+# Only run main() if this script is executed directly (not when imported)
+# This allows the agent to be imported as a module without running the test
+if __name__ == "__main__":
+    asyncio.run(main())
