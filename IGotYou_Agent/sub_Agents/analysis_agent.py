@@ -21,13 +21,20 @@ def analysis_tool(cands: list[dict]) -> dict:
         return [{"error": "APIKey missing"}]
 
     print(f"📊 Analysis for : '{len(cands)}' candidates...")
+    count_reviews = 0
+    for c in cands:
+        count_reviews += c.get('reviews')
+
+    mean_value = count_reviews / len(cands)
+
+    mean_value_over_two = mean_value / 2
 
     potential_hidden_gems = []
     for p in cands:
         rev = p.get('reviews')
         rate = p.get('rating')
 
-        if 10 <= rev <= 1000 and rate >= 3.5:
+        if 10 <= rev <= mean_value_over_two and rate >= 3.5:
             potential_hidden_gems.append(p)
 
     if not potential_hidden_gems:
