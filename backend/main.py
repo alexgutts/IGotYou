@@ -5,6 +5,13 @@ This file provides a REST API interface to the IGotYou Python agent.
 It handles CORS, request validation, and response formatting.
 """
 
+from IGotYou_Agent import root_agent, runner
+import re
+import asyncio
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 import sys
 import os
 from pathlib import Path
@@ -15,15 +22,8 @@ sys.path.insert(0, str(project_root))
 # Also add IGotYou_Agent directory to path so 'config' and 'sub_Agents' imports work
 sys.path.insert(0, str(project_root / "IGotYou_Agent"))
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from typing import List, Optional
-import asyncio
-import re
 
 # Import the agent (must be after path setup)
-from IGotYou_Agent import root_agent, runner
 
 app = FastAPI(
     title="I Got You API",
@@ -83,16 +83,19 @@ def parse_agent_response(raw_response: str, query: str) -> dict:
 
     try:
         response_text = str(raw_response).strip()
-        print(f"[Backend] Attempting to parse JSON response (length: {len(response_text)})")
+        print(
+            f"[Backend] Attempting to parse JSON response (length: {len(response_text)})")
 
         # Remove markdown code blocks if present
-        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+        json_match = re.search(
+            r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
             print(f"[Backend] Found JSON in code block")
         else:
             # Look for JSON object with "gems" array
-            json_match = re.search(r'\{\s*"gems"\s*:\s*\[.*?\]\s*\}', response_text, re.DOTALL)
+            json_match = re.search(
+                r'\{\s*"gems"\s*:\s*\[.*?\]\s*\}', response_text, re.DOTALL)
             if json_match:
                 json_str = json_match.group(0)
                 print(f"[Backend] Found JSON with gems array")
@@ -106,7 +109,8 @@ def parse_agent_response(raw_response: str, query: str) -> dict:
 
         # Parse the JSON
         parsed_data = json.loads(json_str)
-        print(f"[Backend] Successfully parsed JSON. Keys: {list(parsed_data.keys())}")
+        print(
+            f"[Backend] Successfully parsed JSON. Keys: {list(parsed_data.keys())}")
 
         # Validate and return
         if "gems" in parsed_data and isinstance(parsed_data["gems"], list):
@@ -130,7 +134,7 @@ def parse_agent_response(raw_response: str, query: str) -> dict:
 def transform_gem_format(gem: dict, full_response: str = "") -> dict:
     """
     Transform analysis agent's gem format to frontend's expected format.
-    
+
     Analysis agent format:
     {
         "name": "...",
@@ -141,7 +145,7 @@ def transform_gem_format(gem: dict, full_response: str = "") -> dict:
         "reviews_content": "...",
         "loc": {"lat": ..., "lng": ...}  # from discovery agent (might not be present)
     }
-    
+
     Frontend format:
     {
         "placeName": "...",
@@ -161,10 +165,11 @@ def transform_gem_format(gem: dict, full_response: str = "") -> dict:
     coordinates = {"lat": 0, "lng": 0}
     if "loc" in gem and gem["loc"]:
         if isinstance(gem["loc"], dict):
-            coordinates = {"lat": float(gem["loc"].get("lat", 0)), "lng": float(gem["loc"].get("lng", 0))}
+            coordinates = {"lat": float(gem["loc"].get(
+                "lat", 0)), "lng": float(gem["loc"].get("lng", 0))}
     elif "coordinates" in gem:
         coordinates = gem["coordinates"]
-    
+
     # Try to extract coordinates from map_url if available
     if coordinates["lat"] == 0 and coordinates["lng"] == 0:
         map_url = gem.get("map_url", "")
@@ -172,18 +177,20 @@ def transform_gem_format(gem: dict, full_response: str = "") -> dict:
             # Extract coordinates from Google Maps URL if present
             coords_match = re.search(r'[@!](-?\d+\.\d+),(-?\d+\.\d+)', map_url)
             if coords_match:
-                coordinates = {"lat": float(coords_match.group(1)), "lng": float(coords_match.group(2))}
-    
+                coordinates = {"lat": float(coords_match.group(
+                    1)), "lng": float(coords_match.group(2))}
+
     # Try to extract analysis from the full response Markdown for this specific place
     place_name = gem.get("name", gem.get("placeName", ""))
     analysis = extract_analysis_from_markdown(place_name, full_response)
-    
+
     # Generate photo URL (placeholder - in production, get from Google Places photos)
     photos = []
     if gem.get("map_url"):
         photos.append(gem["map_url"])
-    photos.append("https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800")
-    
+    photos.append(
+        "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=800")
+
     return {
         "placeName": place_name or gem.get("placeName", "Unknown Place"),
         "address": gem.get("address", "Address not available"),
@@ -205,33 +212,37 @@ def extract_analysis_from_markdown(place_name: str, markdown_text: str) -> dict:
         "bestTime": "Check local hours",
         "insiderTip": "Visit during off-peak hours for the best experience"
     }
-    
+
     try:
         # Find the section for this specific place
         # Look for headers with the place name
         place_section_pattern = rf'###\s*\d+\.\s*{re.escape(place_name)}.*?(?=###|$)'
-        place_section = re.search(place_section_pattern, markdown_text, re.DOTALL | re.IGNORECASE)
-        
+        place_section = re.search(
+            place_section_pattern, markdown_text, re.DOTALL | re.IGNORECASE)
+
         if place_section:
             section_text = place_section.group(0)
-            
+
             # Extract "Why it's special"
-            why_match = re.search(r'\*\*Why it\'s a Hidden Gem:\*\*\s*(.+?)(?=\*\*|💡|📍|🗺️|$)', section_text, re.DOTALL)
+            why_match = re.search(
+                r'\*\*Why it\'s a Hidden Gem:\*\*\s*(.+?)(?=\*\*|💡|📍|🗺️|$)', section_text, re.DOTALL)
             if why_match:
                 analysis["whySpecial"] = why_match.group(1).strip()
-            
+
             # Extract insider tip
-            tip_match = re.search(r'💡\s*Insider Tip:\*\*\s*(.+?)(?=\*\*|📍|🗺️|$)', section_text, re.DOTALL)
+            tip_match = re.search(
+                r'💡\s*Insider Tip:\*\*\s*(.+?)(?=\*\*|📍|🗺️|$)', section_text, re.DOTALL)
             if tip_match:
                 analysis["insiderTip"] = tip_match.group(1).strip()
-            
+
             # Extract best time if mentioned
-            time_match = re.search(r'(?:best time|best visit|ideal time):\s*([^\n]+)', section_text, re.IGNORECASE)
+            time_match = re.search(
+                r'(?:best time|best visit|ideal time):\s*([^\n]+)', section_text, re.IGNORECASE)
             if time_match:
                 analysis["bestTime"] = time_match.group(1).strip()
     except Exception as e:
         print(f"[Backend] Could not extract analysis from Markdown: {e}")
-    
+
     return analysis
 
 
@@ -241,39 +252,49 @@ def parse_markdown_response(markdown_text: str, query: str) -> dict:
     The recommendation agent formats data as Markdown, so we extract what we can.
     """
     import json
-    
+
     gems = []
-    
+
     try:
         # Look for place names (usually in headers like ### 1. Place Name)
         place_matches = re.findall(r'###\s*\d+\.\s*([^\n(]+)', markdown_text)
-        
+
         # Look for ratings (⭐ [Rating])
         rating_matches = re.findall(r'⭐\s*([\d.]+)', markdown_text)
-        
+
         # Look for review counts (👤 [Count] reviews)
         review_matches = re.findall(r'👤\s*(\d+)\s*reviews?', markdown_text)
-        
+
         # Look for addresses (📍 Location: [Address])
-        address_matches = re.findall(r'📍\s*Location:\s*([^\n]+)', markdown_text)
-        
+        address_matches = re.findall(
+            r'📍\s*Location:\s*([^\n]+)', markdown_text)
+
         # Look for "Why it's special" sections
-        why_special_matches = re.findall(r'\*\*Why it\'s a Hidden Gem:\*\*\s*([^\n]+(?:\n(?!\*\*|📍|🗺️|###)[^\n]+)*)', markdown_text, re.MULTILINE)
-        
+        why_special_matches = re.findall(
+            r'\*\*Why it\'s a Hidden Gem:\*\*\s*([^\n]+(?:\n(?!\*\*|📍|🗺️|###)[^\n]+)*)', markdown_text, re.MULTILINE)
+
         # Look for insider tips
-        tip_matches = re.findall(r'💡\s*Insider Tip:\*\*\s*([^\n]+(?:\n(?!\*\*|📍|🗺️|###)[^\n]+)*)', markdown_text, re.MULTILINE)
-        
+        tip_matches = re.findall(
+            r'💡\s*Insider Tip:\*\*\s*([^\n]+(?:\n(?!\*\*|📍|🗺️|###)[^\n]+)*)', markdown_text, re.MULTILINE)
+
         # Extract data for each gem found
-        max_gems = max(len(place_matches), len(address_matches), len(why_special_matches))
-        
+        max_gems = max(len(place_matches), len(
+            address_matches), len(why_special_matches))
+
         for i in range(max_gems):
-            place_name = place_matches[i] if i < len(place_matches) else f"Place {i+1}"
-            rating = float(rating_matches[i]) if i < len(rating_matches) else 4.0
-            review_count = int(review_matches[i]) if i < len(review_matches) else 0
-            address = address_matches[i].strip() if i < len(address_matches) else "Address not available"
-            why_special = why_special_matches[i].strip() if i < len(why_special_matches) else "A hidden gem worth exploring"
-            tip = tip_matches[i].strip() if i < len(tip_matches) else "Visit during off-peak hours for the best experience"
-            
+            place_name = place_matches[i] if i < len(
+                place_matches) else f"Place {i+1}"
+            rating = float(rating_matches[i]) if i < len(
+                rating_matches) else 4.0
+            review_count = int(review_matches[i]) if i < len(
+                review_matches) else 0
+            address = address_matches[i].strip() if i < len(
+                address_matches) else "Address not available"
+            why_special = why_special_matches[i].strip() if i < len(
+                why_special_matches) else "A hidden gem worth exploring"
+            tip = tip_matches[i].strip() if i < len(
+                tip_matches) else "Visit during off-peak hours for the best experience"
+
             # Transform to match frontend format
             gem_dict = {
                 "name": place_name.strip(),  # Will be transformed by transform_gem_format
@@ -282,7 +303,7 @@ def parse_markdown_response(markdown_text: str, query: str) -> dict:
                 "address": address,
                 "coordinates": {"lat": 0, "lng": 0},  # Would need geocoding
             }
-            
+
             # Transform using the same function used for JSON gems
             transformed_gem = transform_gem_format(gem_dict, markdown_text)
             # Override analysis since we extracted it from Markdown
@@ -291,16 +312,16 @@ def parse_markdown_response(markdown_text: str, query: str) -> dict:
                 "bestTime": "Check local hours",
                 "insiderTip": tip
             }
-            
+
             gems.append(transformed_gem)
-        
+
         if gems:
             print(f"[Backend] Extracted {len(gems)} gems from Markdown")
             return {"gems": gems}
         else:
             # Return empty if nothing found
             return {"gems": []}
-            
+
     except Exception as e:
         print(f"[Backend] Error parsing Markdown: {e}")
         return {"gems": []}
@@ -340,7 +361,8 @@ async def discover_gems(request: DiscoveryRequest):
         # Run the agent
         response = await runner.run_debug(request.searchQuery)
 
-        print(f"[Backend] Agent response received (length: {len(str(response))})")
+        print(
+            f"[Backend] Agent response received (length: {len(str(response))})")
         print(f"[Backend] Agent response preview: {str(response)[:200]}...")
 
         # Parse JSON response from recommendation agent
